@@ -1,0 +1,14 @@
+[Unit]
+Description=Reload RTL8821CS WiFi/BT driver (SDIO boot-race workaround)
+After=multi-user.target
+Wants=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/nova-wifi-fix.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
