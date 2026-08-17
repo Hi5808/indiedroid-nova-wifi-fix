@@ -4,10 +4,26 @@
 #
 # What this does:
 #   1. Installs RTL8821CS WiFi + Bluetooth firmware to /lib/firmware (backs up existing files first)
-#   2. Installs firmware-realtek, wpasupplicant, wireless-regdb from bundled .deb files (offline)
+#   2. Installs firmware-realtek, wpasupplicant, wireless-regdb, parted from bundled .deb files (offline)
 #   3. Installs a systemd service that reloads the rtw88 driver stack at boot and disables
 #      WiFi power-save, working around a driver init race against the SDIO bus (see README.md)
+#   4. Installs a systemd service that grows the root partition + btrfs filesystem to fill
+#      the eMMC, since the stock image ships a fixed ~3.5GB root that never auto-expands
 set -e
+
+# Enables a systemd unit whether run on a live booted system (systemctl) or inside a
+# chroot with no systemd PID 1 (e.g. baking this into an image), where the unit is
+# enabled by hand via symlink instead.
+enable_unit() {
+    local unit="$1" wanted_by="$2"
+    if [ -d /run/systemd/system ]; then
+        systemctl enable --now "$unit"
+    else
+        echo "No running systemd detected (chroot build) - enabling $unit via symlink instead of systemctl."
+        mkdir -p "/etc/systemd/system/${wanted_by}.wants"
+        ln -sf "/etc/systemd/system/$unit" "/etc/systemd/system/${wanted_by}.wants/$unit"
+    fi
+}
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FW_DIR="/lib/firmware"
@@ -51,22 +67,23 @@ echo
 echo "--- Step 3: systemd boot-time driver reload service ---"
 install -m 0755 "$SCRIPT_DIR/systemd/nova-wifi-fix.sh" /usr/local/sbin/nova-wifi-fix.sh
 install -m 0644 "$SCRIPT_DIR/systemd/nova-wifi-fix.service" /etc/systemd/system/nova-wifi-fix.service
+if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
+enable_unit nova-wifi-fix.service multi-user.target
 
-if [ -d /run/systemd/system ]; then
-    # Running on a live, booted system: use systemctl normally.
-    systemctl daemon-reload
-    systemctl enable --now nova-wifi-fix.service
-else
-    # Running inside a chroot (e.g. baking this into an image) with no systemd PID 1:
-    # enable the unit by hand instead of calling systemctl.
-    echo "No running systemd detected (chroot build) - enabling unit via symlink instead of systemctl."
-    mkdir -p /etc/systemd/system/multi-user.target.wants
-    ln -sf /etc/systemd/system/nova-wifi-fix.service /etc/systemd/system/multi-user.target.wants/nova-wifi-fix.service
-fi
+echo
+echo "--- Step 4: systemd root partition/filesystem grow service ---"
+install -m 0755 "$SCRIPT_DIR/systemd/nova-root-resize.sh" /usr/local/sbin/nova-root-resize.sh
+install -m 0644 "$SCRIPT_DIR/systemd/nova-root-resize.service" /etc/systemd/system/nova-root-resize.service
+if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
+enable_unit nova-root-resize.service sysinit.target
 
 echo
 echo "--- Result ---"
 systemctl status nova-wifi-fix.service --no-pager 2>/dev/null || echo "(systemctl unavailable here - unit is installed and enabled, will run on next real boot)"
+echo
+systemctl status nova-root-resize.service --no-pager 2>/dev/null || echo "(systemctl unavailable here - unit is installed and enabled, will run on next real boot)"
+echo
+df -h / 2>&1 || true
 echo
 timeout 3 nmcli device 2>&1 || echo "(nmcli unavailable/no live NetworkManager here - expected in a chroot build)"
 

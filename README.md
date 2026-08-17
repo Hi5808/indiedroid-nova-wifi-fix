@@ -35,13 +35,22 @@ This was independently confirmed and debugged in
 
 1. Installs the correct RTL8821CS WiFi + Bluetooth firmware to `/lib/firmware`
    (backs up any existing files first).
-2. Installs `firmware-realtek`, `wpasupplicant`, and `wireless-regdb` from the
-   bundled `.deb` files in `debs/` — works fully offline, no network required.
+2. Installs `firmware-realtek`, `wpasupplicant`, `wireless-regdb`, and `parted`
+   from the bundled `.deb` files in `debs/` — works fully offline, no network
+   required.
 3. Installs and enables `nova-wifi-fix.service`, a systemd oneshot service that
    runs at every boot, reloads the `rtw88` driver stack (retrying up to 5 times
    until `wlan0` comes up) to clear the init race, and disables WiFi power-saving
    to avoid a secondary "failed to ack driver for entering Deep Power mode" crash
    some users hit under NetworkManager.
+4. Installs and enables `nova-root-resize.service`, a systemd oneshot service that
+   grows the root partition and btrfs filesystem to fill the eMMC. **The stock
+   image ships a fixed ~3.5GB root partition that never auto-expands**, so on a
+   58GB eMMC the root filesystem stays chronically near-full — a single
+   `apt upgrade` (which can easily pull several hundred MB of packages plus a
+   kernel/initramfs regen) is enough to fill it and corrupt the boot chain,
+   producing a completely blank display on next boot with no obvious cause.
+   This service is idempotent and safe to run on every boot.
 
 ## Usage
 
@@ -65,13 +74,15 @@ deciding factor in the reference report linked above.
 ## Contents
 
 ```
-install.sh                       top-level installer
-firmware/rtw88/rtw8821c_fw.bin   WiFi firmware
-firmware/rtl_bt/rtl8821c_fw.bin       Bluetooth firmware
-firmware/rtl_bt/rtl8821c_config.bin   Bluetooth config
-debs/*.deb                       offline packages (arm64/all, Debian 12 bookworm)
-systemd/nova-wifi-fix.service    boot-time systemd unit
-systemd/nova-wifi-fix.sh         the reload/power-save script it runs
+install.sh                          top-level installer
+firmware/rtw88/rtw8821c_fw.bin      WiFi firmware
+firmware/rtl_bt/rtl8821c_fw.bin     Bluetooth firmware
+firmware/rtl_bt/rtl8821c_config.bin Bluetooth config
+debs/*.deb                          offline packages (arm64/all, Debian 12 bookworm)
+systemd/nova-wifi-fix.service       WiFi boot-time systemd unit
+systemd/nova-wifi-fix.sh            the reload/power-save script it runs
+systemd/nova-root-resize.service    root-grow boot-time systemd unit
+systemd/nova-root-resize.sh         the partition/filesystem grow script it runs
 ```
 
 ## Uninstall
