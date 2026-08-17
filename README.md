@@ -14,6 +14,16 @@ rtw_8821cs: probe of mmc2:0001:1 failed with error -110
 Confirmed on the official Indiedroid/ameriDroid Debian 12 (Bookworm/GNOME) image
 and on Ubuntu-Rockchip 24.04, both on kernel `6.1.0-1023-rockchip`.
 
+## Also: DDR/DMC frequency scaling (`armbian/` directory)
+
+Separately from WiFi/BT, the OEM image's bootloader has no DDR DVFS at all
+(`/sys/class/devfreq/dmc` doesn't exist) — this matters a lot for anything
+memory-bandwidth-bound, like NPU inference. Fixing that means switching to a custom
+Armbian build for this board, which already carries the right bootloader blobs. See
+[`armbian/README.md`](armbian/README.md) for the build process, exact flags, and current
+status (DDR fix confirmed working; Bluetooth is not — kernel-level issue, documented
+there).
+
 ## Root cause
 
 Two independent, compounding issues:
