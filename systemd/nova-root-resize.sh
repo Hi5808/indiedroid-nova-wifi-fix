@@ -6,7 +6,9 @@
 # every boot, no-ops once already at full size.
 set -e
 
-ROOT_SRC=$(findmnt -no SOURCE /)
+# findmnt appends the btrfs subvolume path in brackets (e.g. /dev/mmcblk0p3[/@]);
+# strip it to get the plain block device path.
+ROOT_SRC=$(findmnt -no SOURCE / | sed 's/\[.*//')
 PART_NUM=$(echo "$ROOT_SRC" | grep -oE '[0-9]+$')
 DISK="/dev/$(lsblk -no pkname "$ROOT_SRC")"
 

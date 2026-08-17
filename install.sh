@@ -75,7 +75,7 @@ echo "--- Step 4: systemd root partition/filesystem grow service ---"
 install -m 0755 "$SCRIPT_DIR/systemd/nova-root-resize.sh" /usr/local/sbin/nova-root-resize.sh
 install -m 0644 "$SCRIPT_DIR/systemd/nova-root-resize.service" /etc/systemd/system/nova-root-resize.service
 if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
-enable_unit nova-root-resize.service sysinit.target
+enable_unit nova-root-resize.service multi-user.target
 
 echo
 echo "--- Result ---"
