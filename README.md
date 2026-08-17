@@ -51,6 +51,9 @@ This was independently confirmed and debugged in
    kernel/initramfs regen) is enough to fill it and corrupt the boot chain,
    producing a completely blank display on next boot with no obvious cause.
    This service is idempotent and safe to run on every boot.
+5. Installs and enables `openssh-server`. The stock image has no SSH access out
+   of the box, which is a pain when the board has no display/keyboard handy or
+   you're debugging over a USB-sneakernet workflow before WiFi is even up.
 
 ## Usage
 

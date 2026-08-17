@@ -9,6 +9,7 @@
 #      WiFi power-save, working around a driver init race against the SDIO bus (see README.md)
 #   4. Installs a systemd service that grows the root partition + btrfs filesystem to fill
 #      the eMMC, since the stock image ships a fixed ~3.5GB root that never auto-expands
+#   5. Installs and enables openssh-server, since the stock image has no SSH access by default
 set -e
 
 # Enables a systemd unit whether run on a live booted system (systemctl) or inside a
@@ -78,10 +79,17 @@ if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
 enable_unit nova-root-resize.service multi-user.target
 
 echo
+echo "--- Step 5: SSH server ---"
+if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
+enable_unit ssh.service multi-user.target
+
+echo
 echo "--- Result ---"
 systemctl status nova-wifi-fix.service --no-pager 2>/dev/null || echo "(systemctl unavailable here - unit is installed and enabled, will run on next real boot)"
 echo
 systemctl status nova-root-resize.service --no-pager 2>/dev/null || echo "(systemctl unavailable here - unit is installed and enabled, will run on next real boot)"
+echo
+systemctl status ssh.service --no-pager 2>/dev/null || echo "(systemctl unavailable here - unit is installed and enabled, will run on next real boot)"
 echo
 df -h / 2>&1 || true
 echo
