@@ -24,7 +24,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 echo "Kernel: $(uname -a)"
-cat /proc/device-tree/model 2>/dev/null
+cat /proc/device-tree/model 2>/dev/null || true
 echo
 
 echo "--- Step 1: Firmware ---"
@@ -51,14 +51,24 @@ echo
 echo "--- Step 3: systemd boot-time driver reload service ---"
 install -m 0755 "$SCRIPT_DIR/systemd/nova-wifi-fix.sh" /usr/local/sbin/nova-wifi-fix.sh
 install -m 0644 "$SCRIPT_DIR/systemd/nova-wifi-fix.service" /etc/systemd/system/nova-wifi-fix.service
-systemctl daemon-reload
-systemctl enable --now nova-wifi-fix.service
+
+if [ -d /run/systemd/system ]; then
+    # Running on a live, booted system: use systemctl normally.
+    systemctl daemon-reload
+    systemctl enable --now nova-wifi-fix.service
+else
+    # Running inside a chroot (e.g. baking this into an image) with no systemd PID 1:
+    # enable the unit by hand instead of calling systemctl.
+    echo "No running systemd detected (chroot build) - enabling unit via symlink instead of systemctl."
+    mkdir -p /etc/systemd/system/multi-user.target.wants
+    ln -sf /etc/systemd/system/nova-wifi-fix.service /etc/systemd/system/multi-user.target.wants/nova-wifi-fix.service
+fi
 
 echo
 echo "--- Result ---"
-systemctl status nova-wifi-fix.service --no-pager || true
+systemctl status nova-wifi-fix.service --no-pager 2>/dev/null || echo "(systemctl unavailable here - unit is installed and enabled, will run on next real boot)"
 echo
-nmcli device 2>&1 || true
+timeout 3 nmcli device 2>&1 || echo "(nmcli unavailable/no live NetworkManager here - expected in a chroot build)"
 
 echo
 echo "Done. Previous firmware (if any) backed up to: $BACKUP_DIR"
