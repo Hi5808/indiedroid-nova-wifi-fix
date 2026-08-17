@@ -10,6 +10,9 @@
 #   4. Installs a systemd service that grows the root partition + btrfs filesystem to fill
 #      the eMMC, since the stock image ships a fixed ~3.5GB root that never auto-expands
 #   5. Installs and enables openssh-server, since the stock image has no SSH access by default
+#   6. Installs a systemd service that attaches Bluetooth over UART using Realtek's
+#      rtk_hciattach tool (armhf binary; needs the armhf architecture + libc6:armhf),
+#      since generic bluez hciattach/btattach cannot bring this chip's hci0 up at all
 set -e
 
 # Enables a systemd unit whether run on a live booted system (systemctl) or inside a
@@ -59,6 +62,7 @@ install -m 0644 "$SCRIPT_DIR/firmware/rtl_bt/rtl8821c_config.bin" "$FW_DIR/rtl_b
 
 echo
 echo "--- Step 2: Packages (offline install from bundled debs) ---"
+dpkg --add-architecture armhf
 dpkg -i "$SCRIPT_DIR"/debs/*.deb || {
     echo "dpkg reported missing deps, attempting apt --fix-broken (needs internet)..."
     apt-get install -f -y || echo "WARN: could not auto-fix deps."
@@ -84,12 +88,27 @@ if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
 enable_unit ssh.service multi-user.target
 
 echo
+echo "--- Step 6: Bluetooth UART attach service ---"
+install -m 0755 "$SCRIPT_DIR/tools/rtk_hciattach" /usr/local/sbin/rtk_hciattach
+mkdir -p "$FW_DIR/rtlbt"
+install -m 0644 "$SCRIPT_DIR/firmware/rtl_bt/rtl8821c_fw.bin"     "$FW_DIR/rtlbt/rtl8821a_fw"
+install -m 0644 "$SCRIPT_DIR/firmware/rtl_bt/rtl8821c_config.bin" "$FW_DIR/rtlbt/rtl8821a_config"
+install -m 0755 "$SCRIPT_DIR/systemd/nova-bt-fix.sh" /usr/local/sbin/nova-bt-fix.sh
+install -m 0644 "$SCRIPT_DIR/systemd/nova-bt-fix.service" /etc/systemd/system/nova-bt-fix.service
+if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
+enable_unit nova-bt-fix.service multi-user.target
+
+echo
 echo "--- Result ---"
 systemctl status nova-wifi-fix.service --no-pager 2>/dev/null || echo "(systemctl unavailable here - unit is installed and enabled, will run on next real boot)"
 echo
 systemctl status nova-root-resize.service --no-pager 2>/dev/null || echo "(systemctl unavailable here - unit is installed and enabled, will run on next real boot)"
 echo
 systemctl status ssh.service --no-pager 2>/dev/null || echo "(systemctl unavailable here - unit is installed and enabled, will run on next real boot)"
+echo
+systemctl status nova-bt-fix.service --no-pager 2>/dev/null || echo "(systemctl unavailable here - unit is installed and enabled, will run on next real boot)"
+echo
+hciconfig -a 2>&1 || echo "(hciconfig unavailable/no hci0 yet here - expected in a chroot build)"
 echo
 df -h / 2>&1 || true
 echo

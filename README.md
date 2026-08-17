@@ -54,6 +54,22 @@ This was independently confirmed and debugged in
 5. Installs and enables `openssh-server`. The stock image has no SSH access out
    of the box, which is a pain when the board has no display/keyboard handy or
    you're debugging over a USB-sneakernet workflow before WiFi is even up.
+6. Installs and enables `nova-bt-fix.service`, which attaches the RTL8821CS
+   Bluetooth controller over its UART (`/dev/ttyS9`) using Realtek's own
+   `rtk_hciattach` tool. **Generic `bluez` `hciattach`/`btattach` cannot bring
+   this chip up at all** — it lacks the extra low-level handshake Realtek's
+   tool performs before the standard H5 (three-wire) sync, so the chip never
+   responds and `hci0` never appears, with zero useful error in `dmesg`.
+   `rtk_hciattach` is a 32-bit armhf binary, so this also adds the armhf
+   architecture and installs `libc6:armhf` (bundled offline, ~2MB) to run it —
+   the RK3588S runs 32-bit ARM code natively, no emulation needed. It also
+   expects firmware under vendor-convention paths/names
+   (`/lib/firmware/rtlbt/rtl8821a_fw` and `rtl8821a_config`, no `.bin`
+   extension) distinct from the kernel driver's own `/lib/firmware/rtl_bt/`
+   convention — the installer copies the same verified firmware to both
+   locations. Once attached, `hci0` behaves like any normal Bluetooth adapter:
+   it starts powered off, same as a fresh install on any Linux desktop, and
+   turning it on via GNOME Settings / `bluetoothctl power on` works normally.
 
 ## Usage
 
@@ -86,13 +102,17 @@ systemd/nova-wifi-fix.service       WiFi boot-time systemd unit
 systemd/nova-wifi-fix.sh            the reload/power-save script it runs
 systemd/nova-root-resize.service    root-grow boot-time systemd unit
 systemd/nova-root-resize.sh         the partition/filesystem grow script it runs
+systemd/nova-bt-fix.service         Bluetooth UART-attach systemd unit
+systemd/nova-bt-fix.sh              the rtk_hciattach wrapper it runs
+tools/rtk_hciattach                 Realtek's UART attach tool (32-bit armhf)
 ```
 
 ## Uninstall
 
 ```bash
-sudo systemctl disable --now nova-wifi-fix.service
+sudo systemctl disable --now nova-wifi-fix.service nova-bt-fix.service
 sudo rm /etc/systemd/system/nova-wifi-fix.service /usr/local/sbin/nova-wifi-fix.sh
+sudo rm /etc/systemd/system/nova-bt-fix.service /usr/local/sbin/nova-bt-fix.sh /usr/local/sbin/rtk_hciattach
 sudo systemctl daemon-reload
 ```
 

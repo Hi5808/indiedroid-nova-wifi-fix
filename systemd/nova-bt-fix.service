@@ -1,0 +1,16 @@
+[Unit]
+Description=Attach RTL8821CS Bluetooth controller via rtk_hciattach
+After=multi-user.target
+Wants=multi-user.target
+Before=bluetooth.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/nova-bt-fix.sh
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
