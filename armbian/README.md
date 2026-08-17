@@ -36,23 +36,42 @@ Notes on flags that aren't obvious from Armbian's docs:
   than official boards). `BRANCH=vendor` (6.1.115) has working display and is what
   actually got used.
 
-## What works vs. what's still broken on this Armbian build
+## What works on this Armbian build
 
-**Working:**
+Everything now works, including Bluetooth. Run `build-bt-fix.sh` (needs network — it
+clones and compiles from source on the board itself) to fix Bluetooth; see below for why.
+
 - DDR/DMC DVFS — the whole point. Confirmed: `/sys/class/devfreq/dmc` exists,
   `governor: dmc_ondemand`, `available_frequencies: 528000000 1068000000 1560000000
   2112000000`, no `trusted firmware unsupported` error anywhere in `dmesg`.
 - WiFi — same `-110` SDIO boot-race as the OEM image (Armbian doesn't have a fix for
   this either); `nova-wifi-fix.sh`/`.service` in this directory is the same driver-reload
   workaround from the main fix, just re-deployed here.
+- **Bluetooth** — confirmed `hci0: UP RUNNING` from a clean boot, `bluetoothctl power on`
+  and `scan on` both succeed. See "Bluetooth: root cause and fix" below — the real fix
+  turned out to be much simpler than the investigation trail below suggests.
 - Root partition — already grows to fill the eMMC on first boot via Armbian's own
   mechanism (ext4, not btrfs like the OEM image), no separate resize fix needed.
 - SSH — enabled by default (socket-activated `ssh.socket`), no separate fix needed.
 - GPU, audio (3 sound cards), NPU/VPU device nodes, USB HID, thermal — all confirmed
   working with no regressions vs. the OEM image.
 
-**Not working — Bluetooth.** Traced through several layers; documenting the full evidence
-chain here since it's a real starting point for whoever picks this up next.
+## Bluetooth: root cause and fix
+
+**Fix: `./build-bt-fix.sh` (run on the board).** It clones `stvhay/rkwifibt` and builds
+`rtk_hciattach` **natively on the target** instead of using Armbian's own prebuilt binary
+(broken — see below) or the 32-bit armhf binary bundled by the main OEM-image fix
+(attaches and reports success at every single step, but `hci0` never registers — turned
+out to be a subtle 32-bit/64-bit compat-ioctl issue, not a real protocol failure).
+Confirmed on a clean boot: `hci0: UP RUNNING`, `bluetoothctl power on` and `scan on` both
+succeed.
+
+The investigation below chased this through four layers before landing on "just build it
+for the right architecture" as the actual fix — kept in full because the debugging
+methodology (kernel source reading, UART byte counters, `strace`) and the real bugs found
+along the way (Armbian's x86-64 binary, the `TIOCSETD`-on-`SIGTERM` footgun, `btattach`'s
+early-exit bug, the firmware filename mismatch) are all still genuinely useful reference
+material, even though none of them turned out to be the final blocker.
 
 ### Layer 1: Armbian's own bundled fix is broken (two bugs)
 
@@ -169,9 +188,18 @@ hardware, or reading/patching `hci_uart_setup()`/`h5_open()`'s termios configura
 kernel source and rebuilding to test further. Out of scope for what's achievable through
 remote SSH-only debugging.
 
-**Not resolved as of this writing.** Whoever picks this up next: start at Layer 4 (the
-earlier three layers are solved and documented above) — the smoking gun is the frozen
-`rx` counter despite continuous `tx`.
+**Resolution:** none of the above was actually it. The `rx`-stays-frozen behavior in this
+layer, and the `hci0`-never-registers behavior in Layer 2, were both downstream symptoms
+of running a **32-bit armhf** `rtk_hciattach` binary against this **64-bit aarch64**
+kernel. Building the exact same source natively for aarch64
+(`build-bt-fix.sh`) fixed it immediately — first attempt after a clean reboot, `hci0: UP
+RUNNING`. The 32-bit binary's ioctls were all *reporting* success (confirmed via
+`strace`), but something in the 32-bit-compat ioctl path was silently setting up
+incorrect internal state, which is consistent with both the never-registers-hci0 symptom
+and the kernel-never-gets-a-response symptom above — the working *native* binary's TX
+traffic gets real chip responses using the identical protocol logic, just compiled for
+the right architecture. If you're debugging a similar issue on other hardware: check
+architecture match **before** chasing kernel driver internals.
 
 **Not investigated:** locale showed briefly garbled `journalctl` output (Cherokee
 `chr_US.utf8` locale, not actual data corruption) in one `systemctl status` call — did
@@ -183,5 +211,10 @@ not reproduce on retry, root cause unconfirmed. `chrony` (this image's NTP clien
 
 ```
 nova-wifi-fix.sh / .service   Same WiFi driver-reload fix as the main repo, re-deployed
-nova-bt-fix.sh / .service     Attempted BT fix; does NOT currently work (see above)
+nova-bt-fix.sh / .service     Bluetooth attach service (works once rtk_hciattach is
+                               built natively — see build-bt-fix.sh)
+build-bt-fix.sh                Clones stvhay/rkwifibt and builds rtk_hciattach natively
+                               on the board, then installs + enables nova-bt-fix.service.
+                               Run this on the Armbian board (needs network) to fix
+                               Bluetooth.
 ```

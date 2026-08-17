@@ -20,9 +20,8 @@ Separately from WiFi/BT, the OEM image's bootloader has no DDR DVFS at all
 (`/sys/class/devfreq/dmc` doesn't exist) — this matters a lot for anything
 memory-bandwidth-bound, like NPU inference. Fixing that means switching to a custom
 Armbian build for this board, which already carries the right bootloader blobs. See
-[`armbian/README.md`](armbian/README.md) for the build process, exact flags, and current
-status (DDR fix confirmed working; Bluetooth is not — kernel-level issue, documented
-there).
+[`armbian/README.md`](armbian/README.md) for the build process, exact flags, and status —
+DDR fix and Bluetooth (`armbian/build-bt-fix.sh`) both confirmed working.
 
 ## Root cause
 
