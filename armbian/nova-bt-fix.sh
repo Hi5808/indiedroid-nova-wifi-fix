@@ -18,7 +18,7 @@ for i in $(seq 1 "$MAX_TRIES"); do
     echo "Attempt $i/$MAX_TRIES: attaching via rtk_hciattach"
     pkill -f rtk_hciattach 2>/dev/null || true
     sleep 1
-    /usr/bin/rtk_hciattach -n -s 115200 "$TTY" rtk_h5 &
+    /usr/local/sbin/rtk_hciattach -n -s 115200 "$TTY" rtk_h5 &
     sleep 6
 done
 
