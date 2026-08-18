@@ -99,10 +99,23 @@ a genuinely marginal power supply. If you still see WiFi drop out intermittently
 proper 5V/3A+ supply before assuming it's a driver/software problem — that was the
 deciding factor in the reference report linked above.
 
+## Backing up a working setup
+
+Once you've got everything configured the way you want (fixes applied, apps installed,
+accounts set up), `backup-emmc.sh` dumps the whole eMMC into a compressed image you can
+flash straight back with the same `rkdeveloptool` workflow used everywhere else in this
+repo — much faster than re-running the whole setup from scratch next time.
+
+```bash
+# Board in maskrom mode, connected via USB-C, on the host laptop:
+sudo bash backup-emmc.sh my-nova-backup
+```
+
 ## Contents
 
 ```
 install.sh                          top-level installer
+backup-emmc.sh                      full-eMMC backup/restore helper (run on the host)
 firmware/rtw88/rtw8821c_fw.bin      WiFi firmware
 firmware/rtl_bt/rtl8821c_fw.bin     Bluetooth firmware
 firmware/rtl_bt/rtl8821c_config.bin Bluetooth config
